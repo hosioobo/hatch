@@ -1,6 +1,6 @@
 ---
 name: hatch
-description: Manage a declared Hatch lifecycle workspace only when work crosses its workbench → product → evidence boundary: prepare or apply a promotion, record human or automated evidence against a candidate or product commit, audit public-safety risks, or make a public-readiness gate decision. Use for an explicit `$hatch` lifecycle request, or implicitly only inside a workspace with a `hatch.toml` marker and one of those lifecycle intents. Do not use for ordinary coding, builds, tests, Git operations, deployments/releases, generic skill creation or installation, or Codex animated-pet work. Bootstrap Hatch itself only after an explicit self-hosting request.
+description: Manage a declared Hatch lifecycle workspace only when work crosses its workbench → product → evidence boundary: prepare or apply a promotion, preserve human or automated evaluation evidence, audit public-safety risks, or make a public-readiness gate decision for an exact product commit. Use for an explicit `$hatch` lifecycle request, or implicitly only inside a workspace with a `hatch.toml` marker and one of those lifecycle intents. Do not use for ordinary coding, builds, tests, Git operations, deployments/releases, generic skill creation or installation, or Codex animated-pet work. Bootstrap Hatch itself only after an explicit self-hosting request.
 ---
 
 # Hatch
@@ -18,8 +18,9 @@ concise brief, not as synchronization between repositories.
 - Require both a valid marker and a clear lifecycle intent before inferring
   Hatch. Otherwise, use the ordinary relevant skill or workflow.
 - Treat `workbench` as private and disposable, `product` as the sole
-  canonical public-safe source, and `evidence` as records about a candidate or
-  exact product commit.
+  canonical public-safe source, and `evals` as the private record of real use.
+  Preserve exploratory artifacts there; a gateable `hatch.evidence` record
+  always names an exact product commit.
 - Keep product tests distinct from evidence. Tests may contribute evidence;
   human observations, generated outputs, screenshots, and failure cases may
   contribute too.
@@ -60,10 +61,14 @@ Do not infer Hatch from "build", "test", "review", "commit", "publish", or
 
 ## Record evidence
 
-Record one evaluation case with
-[evidence-record.md](references/evidence-record.md). Attach evidence to either
-a workbench snapshot or an exact product commit. Include human, automated, or
-mixed observations as appropriate.
+Keep exploratory results—human notes, generated outputs, screenshots, and
+failure cases—as private eval artifacts or summarize them in a Promotion Brief.
+They may inform a workbench candidate, but do not gate a promotion.
+
+Use [evidence-record.md](references/evidence-record.md) only after the exact
+product commit is known. A gateable record names that commit and lists the
+evidence and acceptance IDs it supports. Include human, automated, or mixed
+observations as appropriate.
 
 If an output is worth productizing, create a new Promotion Brief or add it to
 the current brief. Do not promote raw eval output automatically.
@@ -72,14 +77,15 @@ the current brief. Do not promote raw eval output automatically.
 
 Run `scripts/hatch.py audit` against an explicit product ref or history range.
 Use the workspace's private audit policy for project-specific terms.
-Report `FINDINGS`, `NO MECHANICAL FINDINGS`, or `ERROR`; never say a project is
-safe to publish merely because the script found nothing.
+Report mechanical findings and coverage gaps plainly. An audit `PASS` means no
+mechanical finding in the scanned scope; never call that a safety guarantee.
 
 ## Gate
 
-Run `scripts/hatch.py gate` only for an exact product commit. It verifies that the
-brief's required acceptance and evidence items are complete and tied to that
-commit. Return `READY`, `BLOCKED`, or `NEEDS EVIDENCE`; do not push.
+Run `scripts/hatch.py gate` only for an exact product commit. It verifies that
+each required evidence item and its declared acceptance linkage are complete
+and tied to that commit. Return `READY`, `BLOCKED`, or `NEEDS-EVIDENCE`; do not
+push.
 
 ## Bootstrap Hatch
 

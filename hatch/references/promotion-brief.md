@@ -19,6 +19,10 @@ make the user complete a blank form when the answer is already in context.
 | `public_assessment` / `risk_decisions` | Privacy, provenance, attribution, and accepted-risk decisions. |
 | `product` | Base commit before promotion and exact target commit after it. |
 
+Each `evidence_required` item names the acceptance IDs it proves. A gateable
+evidence record must repeat those IDs; this keeps the final gate traceable
+without turning the brief into a checklist for the user.
+
 Validate before applying a promotion:
 
 ```text

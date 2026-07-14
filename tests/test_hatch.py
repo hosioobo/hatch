@@ -203,8 +203,29 @@ literal = ["private-name"]
             "observations": "The product meets the brief.",
             "artifacts": [],
         }
+        unlinked_path = self.evals / "evidence" / "unlinked.json"
+        unlinked_path.parent.mkdir(parents=True)
+        unlinked_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        unlinked = self.run_cli(
+            "gate",
+            "--workspace",
+            str(self.root),
+            "--commit",
+            target,
+            "--brief",
+            brief_relative,
+            "--audit",
+            f"demo-evals/audits/{target[:12]}.json",
+            "--evidence",
+            "demo-evals/evidence/unlinked.json",
+            "--out",
+            "demo-evals/gates/unlinked.json",
+        )
+        self.assertEqual(unlinked.returncode, 2, unlinked.stdout + unlinked.stderr)
+        self.assertIn("evidence-acceptance-ids-invalid:E1", unlinked.stdout)
+        evidence["acceptance_ids"] = ["A1"]
         evidence_path = self.evals / "evidence" / "review.json"
-        evidence_path.parent.mkdir(parents=True)
+        evidence_path.parent.mkdir(parents=True, exist_ok=True)
         evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
         gated = self.run_cli(
             "gate",

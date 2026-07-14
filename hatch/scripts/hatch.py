@@ -729,8 +729,16 @@ def command_gate(args: argparse.Namespace) -> int:
             reasons.append("invalid-evidence-requirement")
             continue
         requirement_id = requirement["id"]
+        required_acceptance_ids = requirement.get("acceptance_ids")
+        if not isinstance(required_acceptance_ids, list) or not all(
+            isinstance(acceptance_id, str) for acceptance_id in required_acceptance_ids
+        ):
+            reasons.append("invalid-evidence-requirement")
+            continue
+        required_acceptance = set(required_acceptance_ids)
         satisfying = False
         failed = False
+        linkage_errors: list[str] = []
         for _, record in evidence_records:
             if record.get("schema") != SCHEMA or record.get("kind") != "hatch.evidence":
                 continue
@@ -738,6 +746,15 @@ def command_gate(args: argparse.Namespace) -> int:
                 continue
             evidence_ids = record.get("evidence_ids", [])
             if not isinstance(evidence_ids, list) or requirement_id not in evidence_ids:
+                continue
+            acceptance_ids = record.get("acceptance_ids")
+            if not isinstance(acceptance_ids, list) or not all(
+                isinstance(acceptance_id, str) for acceptance_id in acceptance_ids
+            ):
+                linkage_errors.append(f"evidence-acceptance-ids-invalid:{requirement_id}")
+                continue
+            if not required_acceptance.issubset(set(acceptance_ids)):
+                linkage_errors.append(f"evidence-acceptance-link-mismatch:{requirement_id}")
                 continue
             result = record.get("result")
             if result == "pass":
@@ -758,10 +775,21 @@ def command_gate(args: argparse.Namespace) -> int:
             reasons.append(f"evidence-failed:{requirement_id}")
         elif not satisfying:
             reasons.append(f"missing-evidence:{requirement_id}")
+            reasons.extend(linkage_errors)
     unique_reasons = sorted(set(reasons))
     if not unique_reasons:
         status = "ready"
-    elif all(reason.startswith(("missing-evidence", "evidence-failed", "evidence-not-applicable")) for reason in unique_reasons):
+    elif all(
+        reason.startswith(
+            (
+                "missing-evidence",
+                "evidence-failed",
+                "evidence-not-applicable",
+                "evidence-acceptance-",
+            )
+        )
+        for reason in unique_reasons
+    ):
         status = "needs-evidence"
     else:
         status = "blocked"
