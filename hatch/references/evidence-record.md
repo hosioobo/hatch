@@ -11,6 +11,7 @@ the workspace's `records.evidence` path.
   "mode": "human",
   "case": "What was tried",
   "acceptance_ids": ["A1"],
+  "evidence_ids": ["E1"],
   "result": "pass",
   "observations": "What happened, including uncertainty",
   "artifacts": []
