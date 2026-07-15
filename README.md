@@ -13,4 +13,5 @@ the decision to real evidence.
 Start a project with Hatch and it creates separate local workbench, product,
 and eval repositories—each with its own Git history and no remote by default.
 When a version is ready, Hatch records it in `VERSION` and `CHANGELOG.md`, then
-audits files, paths, Git identities, and commit messages before the final gate.
+audits files, paths, Git identities, and commit messages before the final
+public-readiness check.

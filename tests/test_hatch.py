@@ -152,7 +152,7 @@ literal = ["private-name"]
     def test_init_plans_then_creates_independent_repositories(self) -> None:
         parent = Path(self.temporary.name) / "projects"
         parent.mkdir()
-        planned = self.run_cli("init", "--parent", str(parent), "--name", "luna")
+        planned = self.run_cli("init", "--parent", str(parent), "--name", "luna", "--dry-run")
         self.assertEqual(planned.returncode, 0, planned.stderr)
         self.assertIn("INIT PLAN", planned.stdout)
         root = parent / "luna"
@@ -167,7 +167,6 @@ literal = ["private-name"]
             "public-author",
             "--public-email",
             "public@example.invalid",
-            "--apply",
         )
         self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
         self.assertIn("INIT CREATED", applied.stdout)
@@ -226,19 +225,19 @@ literal = ["private-name"]
         self.assertIn("configured-term at commit message", result.stdout)
         self.assertNotIn("private-name", result.stdout + result.stderr)
 
-    def test_gate_accepts_exact_commit_with_matching_evidence(self) -> None:
+    def test_ready_accepts_exact_commit_with_matching_evidence(self) -> None:
         created = self.run_cli(
             "brief",
             "new",
             "--workspace",
             str(self.root),
             "--id",
-            "demo-gate",
+            "demo-ready",
             "--item",
             "idea.txt",
         )
         self.assertEqual(created.returncode, 0, created.stderr)
-        brief_relative = "demo-workbench/promotions/demo-gate/brief.json"
+        brief_relative = "demo-workbench/promotions/demo-ready/brief.json"
         brief_path = self.root / brief_relative
         self.fill_brief(brief_path)
         applied_version = self.run_cli(
@@ -290,7 +289,7 @@ literal = ["private-name"]
         unlinked_path.parent.mkdir(parents=True)
         unlinked_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
         unlinked = self.run_cli(
-            "gate",
+            "ready",
             "--workspace",
             str(self.root),
             "--commit",
@@ -311,7 +310,7 @@ literal = ["private-name"]
         evidence_path.parent.mkdir(parents=True, exist_ok=True)
         evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
         gated = self.run_cli(
-            "gate",
+            "ready",
             "--workspace",
             str(self.root),
             "--commit",
@@ -324,7 +323,7 @@ literal = ["private-name"]
             "demo-evals/evidence/review.json",
         )
         self.assertEqual(gated.returncode, 0, gated.stdout + gated.stderr)
-        self.assertIn("GATE READY", gated.stdout)
+        self.assertIn("READY TO PUSH", gated.stdout)
 
 
 if __name__ == "__main__":

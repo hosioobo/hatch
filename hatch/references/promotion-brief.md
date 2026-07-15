@@ -21,7 +21,7 @@ make the user complete a blank form when the answer is already in context.
 | `version` | Stable public version and one-line public summary for `VERSION` and `CHANGELOG.md`. |
 
 Each `evidence_required` item names the acceptance IDs it proves. A gateable
-evidence record must repeat those IDs; this keeps the final gate traceable
+evidence record must repeat those IDs; this keeps the final readiness check traceable
 without turning the brief into a checklist for the user.
 
 Validate before applying a promotion:

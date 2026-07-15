@@ -18,4 +18,4 @@ python3 scripts/hatch.py version apply --workspace <root> --brief <brief.json>
 
 This writes the product's `VERSION` and a matching top entry in `CHANGELOG.md`.
 Commit those changes with the product, then verify the exact commit with
-`version check` or `gate`. Tags, releases, and pushes remain separate actions.
+`version check` or `ready`. Tags, releases, and pushes remain separate actions.

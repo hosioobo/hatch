@@ -2,7 +2,7 @@
 
 Store one private JSON record per human, automated, or mixed evaluation under
 the workspace's `records.evidence` path **after the exact product commit is
-known**. This is the record that `gate` consumes.
+known**. This is the record consumed by the readiness check.
 
 ```json
 {
@@ -20,12 +20,12 @@ known**. This is the record that `gate` consumes.
 ```
 
 `acceptance_ids` is required: include every acceptance ID named by the linked
-evidence requirement. `gate` rejects a passing record that cannot make that
+evidence requirement. The readiness check rejects a passing record that cannot make that
 link.
 
 Keep exploratory human notes, generated outputs, and workbench-snapshot
 results as ordinary private eval artifacts instead. They can inform a Promotion
-Brief, but they do not satisfy a gate until an exact product commit and its
+Brief, but they do not satisfy a readiness check until an exact product commit and its
 acceptance linkage are recorded here.
 
 Use `result: "not-applicable"` only when the corresponding evidence requirement

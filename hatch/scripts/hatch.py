@@ -284,13 +284,12 @@ def configure_public_identity(path: Path, name: str, email: str) -> None:
 def command_init(args: argparse.Namespace) -> int:
     root, workbench, product, evals = init_workspace_paths(args.parent, args.name)
     paths = (("workbench", workbench), ("product", product), ("evals", evals))
-    print("INIT PLAN")
-    print(f"- container {root}")
-    for label, path in paths:
-        print(f"- {label} {path}")
-    print("- three independent local Git repositories; no commit, remote, push, release, or deploy")
-    if not args.apply:
-        print("Run again with --apply after confirming this plan.")
+    if args.dry_run:
+        print("INIT PLAN")
+        print(f"- container {root}")
+        for label, path in paths:
+            print(f"- {label} {path}")
+        print("- three independent local Git repositories; no commit, remote, push, release, or deploy")
         return 0
     for value, label in ((args.public_name, "public name"), (args.public_email, "public email")):
         if not isinstance(value, str) or not value.strip() or "\n" in value or "\r" in value:
@@ -943,7 +942,7 @@ def validate_artifacts(workspace: Workspace, record: dict[str, Any], reasons: li
             reasons.append("evidence-artifact-mismatch")
 
 
-def command_gate(args: argparse.Namespace) -> int:
+def command_ready(args: argparse.Namespace) -> int:
     workspace = load_workspace(args.workspace)
     target = git_commit(workspace.product, args.commit)
     target_tree = git_tree(workspace.product, target)
@@ -1079,7 +1078,7 @@ def command_gate(args: argparse.Namespace) -> int:
         status = "blocked"
     report = {
         "schema": SCHEMA,
-        "kind": "hatch.gate",
+        "kind": "hatch.ready",
         "target_commit": target,
         "target_tree": target_tree,
         "status": status,
@@ -1089,7 +1088,7 @@ def command_gate(args: argparse.Namespace) -> int:
         "blocking_reasons": unique_reasons,
         "warnings": sorted(set(warnings)),
     }
-    brief_id = brief.get("id", "gate") if isinstance(brief.get("id"), str) else "gate"
+    brief_id = brief.get("id", "ready") if isinstance(brief.get("id"), str) else "ready"
     output = safe_output(
         workspace,
         workspace.gates,
@@ -1097,7 +1096,8 @@ def command_gate(args: argparse.Namespace) -> int:
         workspace.gates / f"{target[:12]}-{brief_id}.json",
     )
     write_json_new(output, report)
-    print(f"GATE {status.upper()} {record_relative(workspace, output)}")
+    label = {"ready": "READY TO PUSH", "blocked": "NOT READY", "needs-evidence": "NEEDS EVIDENCE"}[status]
+    print(f"{label} {record_relative(workspace, output)}")
     for reason in unique_reasons:
         print(f"- {reason}")
     return 0 if status == "ready" else 2
@@ -1106,12 +1106,12 @@ def command_gate(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    init = subparsers.add_parser("init", help="plan or create a new local Hatch workspace")
+    init = subparsers.add_parser("init", help="create a new local Hatch workspace")
     init.add_argument("--parent", required=True)
     init.add_argument("--name", required=True)
     init.add_argument("--public-name")
     init.add_argument("--public-email")
-    init.add_argument("--apply", action="store_true")
+    init.add_argument("--dry-run", action="store_true")
     init.set_defaults(handler=command_init)
     brief = subparsers.add_parser("brief", help="create or check promotion briefs")
     brief_subparsers = brief.add_subparsers(dest="brief_command", required=True)
@@ -1143,14 +1143,14 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--base", help="ancestor commit, or EMPTY for all reachable history")
     audit.add_argument("--out")
     audit.set_defaults(handler=command_audit)
-    gate = subparsers.add_parser("gate", help="check a commit against brief, audit, and evidence")
-    gate.add_argument("--workspace", required=True)
-    gate.add_argument("--commit", required=True)
-    gate.add_argument("--brief", required=True)
-    gate.add_argument("--audit", required=True)
-    gate.add_argument("--evidence", action="append", default=[])
-    gate.add_argument("--out")
-    gate.set_defaults(handler=command_gate)
+    ready = subparsers.add_parser("ready", help="confirm whether an exact commit is ready to push")
+    ready.add_argument("--workspace", required=True)
+    ready.add_argument("--commit", required=True)
+    ready.add_argument("--brief", required=True)
+    ready.add_argument("--audit", required=True)
+    ready.add_argument("--evidence", action="append", default=[])
+    ready.add_argument("--out")
+    ready.set_defaults(handler=command_ready)
     return parser
 
 
