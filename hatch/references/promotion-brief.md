@@ -18,6 +18,7 @@ make the user complete a blank form when the answer is already in context.
 | `evidence_required` | Human, automated, or mixed proof required for the resulting commit. |
 | `public_assessment` / `risk_decisions` | Privacy, provenance, attribution, and accepted-risk decisions. |
 | `product` | Base commit before promotion and exact target commit after it. |
+| `version` | Stable public version and one-line public summary for `VERSION` and `CHANGELOG.md`. |
 
 Each `evidence_required` item names the acceptance IDs it proves. A gateable
 evidence record must repeat those IDs; this keeps the final gate traceable

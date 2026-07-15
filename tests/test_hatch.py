@@ -57,6 +57,8 @@ literal = ["private-name"]
         (self.workbench / "idea.txt").write_text("A tracked workbench idea.\n", encoding="utf-8")
         self.commit(self.workbench, "seed workbench")
         (self.product / "product.txt").write_text("A public-safe product.\n", encoding="utf-8")
+        (self.product / "VERSION").write_text("0.0.0\n", encoding="utf-8")
+        (self.product / "CHANGELOG.md").write_text("# Changelog\n\n", encoding="utf-8")
         self.commit(self.product, "seed product")
 
     def tearDown(self) -> None:
@@ -82,7 +84,13 @@ literal = ["private-name"]
             capture_output=True,
         )
 
-    def fill_brief(self, path: Path, target: str | None = None) -> None:
+    def fill_brief(
+        self,
+        path: Path,
+        target: str | None = None,
+        version: str = "0.1.0",
+        summary: str = "First public release.",
+    ) -> None:
         brief = json.loads(path.read_text(encoding="utf-8"))
         brief.update(
             {
@@ -100,6 +108,7 @@ literal = ["private-name"]
                 ],
                 "public_assessment": "No known private material belongs in product.",
                 "risk_decisions": [],
+                "version": {"target": version, "summary": summary},
             }
         )
         if target is not None:
@@ -140,6 +149,37 @@ literal = ["private-name"]
         )
         self.assertEqual(checked_again.returncode, 0, checked_again.stdout + checked_again.stderr)
 
+    def test_init_plans_then_creates_independent_repositories(self) -> None:
+        parent = Path(self.temporary.name) / "projects"
+        parent.mkdir()
+        planned = self.run_cli("init", "--parent", str(parent), "--name", "luna")
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        self.assertIn("INIT PLAN", planned.stdout)
+        root = parent / "luna"
+        self.assertFalse(root.exists())
+        applied = self.run_cli(
+            "init",
+            "--parent",
+            str(parent),
+            "--name",
+            "luna",
+            "--public-name",
+            "public-author",
+            "--public-email",
+            "public@example.invalid",
+            "--apply",
+        )
+        self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+        self.assertIn("INIT CREATED", applied.stdout)
+        for name in ("luna-workbench", "luna-product", "luna-evals"):
+            repo = root / name
+            self.assertEqual(self.git(repo, "rev-parse", "--show-toplevel").stdout.strip(), str(repo.resolve()))
+        self.assertEqual((root / "luna-product" / "VERSION").read_text(encoding="utf-8"), "0.0.0\n")
+        self.assertEqual((root / "luna-product" / "CHANGELOG.md").read_text(encoding="utf-8"), "# Changelog\n\n")
+        repeated = self.run_cli("init", "--parent", str(parent), "--name", "luna")
+        self.assertEqual(repeated.returncode, 1)
+        self.assertIn("already exists", repeated.stderr)
+
     def test_audit_scans_history_without_echoing_the_secret(self) -> None:
         base = self.git(self.product, "rev-parse", "HEAD").stdout.strip()
         secret = "sk-" + "a" * 24
@@ -164,8 +204,26 @@ literal = ["private-name"]
         report = self.evals / "audits" / f"{target[:12]}.json"
         self.assertNotIn(secret, report.read_text(encoding="utf-8"))
 
+    def test_audit_scans_commit_messages(self) -> None:
+        base = self.git(self.product, "rev-parse", "HEAD").stdout.strip()
+        (self.product / "public.txt").write_text("Public content.\n", encoding="utf-8")
+        target = self.commit(self.product, "mention private-name in the message")
+        result = self.run_cli(
+            "audit",
+            "--workspace",
+            str(self.root),
+            "--repo",
+            "product",
+            "--ref",
+            target,
+            "--base",
+            base,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("configured-term at commit message", result.stdout)
+        self.assertNotIn("private-name", result.stdout + result.stderr)
+
     def test_gate_accepts_exact_commit_with_matching_evidence(self) -> None:
-        target = self.git(self.product, "rev-parse", "HEAD").stdout.strip()
         created = self.run_cli(
             "brief",
             "new",
@@ -179,7 +237,29 @@ literal = ["private-name"]
         self.assertEqual(created.returncode, 0, created.stderr)
         brief_relative = "demo-workbench/promotions/demo-gate/brief.json"
         brief_path = self.root / brief_relative
+        self.fill_brief(brief_path)
+        applied_version = self.run_cli(
+            "version",
+            "apply",
+            "--workspace",
+            str(self.root),
+            "--brief",
+            brief_relative,
+        )
+        self.assertEqual(applied_version.returncode, 0, applied_version.stdout + applied_version.stderr)
+        target = self.commit(self.product, "publish version 0.1.0")
         self.fill_brief(brief_path, target)
+        checked_version = self.run_cli(
+            "version",
+            "check",
+            "--workspace",
+            str(self.root),
+            "--commit",
+            target,
+            "--brief",
+            brief_relative,
+        )
+        self.assertEqual(checked_version.returncode, 0, checked_version.stdout + checked_version.stderr)
         audited = self.run_cli(
             "audit",
             "--workspace",

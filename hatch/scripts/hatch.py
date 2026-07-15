@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Create and verify the durable records used by a Hatch workspace.
+"""Create and verify the durable boundaries used by a Hatch workspace.
 
-This tool deliberately does not copy source, commit, push, release, or deploy.
-It only writes explicitly requested records below the private record roots.
+This tool can explicitly create a new local workspace and apply a version from
+an approved Promotion Brief. It never copies source, commits, pushes, releases,
+or deploys.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ SCHEMA = 1
 MAX_TEXT_BYTES = 1_000_000
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
 REQUIREMENT_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,127}$")
+SEMVER_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+CHANGELOG_HEADER = "# Changelog\n\n"
 
 
 class HatchError(Exception):
@@ -99,6 +102,33 @@ def write_json_new(path: Path, value: dict[str, Any]) -> None:
     except OSError as exc:
         temporary.unlink(missing_ok=True)
         raise HatchError(f"Could not write record: {path.name}") from exc
+
+
+def write_text_new(path: Path, text: str, label: str) -> None:
+    if path.exists() or path.is_symlink():
+        raise HatchError(f"Refusing to overwrite existing {label}: {path.name}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(temporary, path)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        raise HatchError(f"Could not write {label}: {path.name}") from exc
+
+
+def replace_regular_text(path: Path, text: str, label: str) -> None:
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise HatchError(f"{label} must be a regular file")
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(temporary, path)
+    except OSError as exc:
+        temporary.unlink(missing_ok=True)
+        raise HatchError(f"Could not write {label}: {path.name}") from exc
 
 
 def is_within(path: Path, root: Path) -> bool:
@@ -211,6 +241,123 @@ def git_is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     raise HatchError("Git ancestry check failed")
 
 
+def init_workspace_paths(parent_value: str, name: str) -> tuple[Path, Path, Path, Path]:
+    if not ID_RE.fullmatch(name):
+        raise HatchError("workspace name must use lowercase letters, digits, dots, underscores, or hyphens")
+    raw_parent = Path(parent_value).expanduser()
+    if not raw_parent.is_dir() or raw_parent.is_symlink():
+        raise HatchError("workspace parent must be an existing regular directory")
+    parent = raw_parent.resolve()
+    if git_result(parent, ["rev-parse", "--is-inside-work-tree"]).returncode == 0:
+        raise HatchError("workspace parent must not be inside a Git repository")
+    root = parent / name
+    if root.exists() or root.is_symlink():
+        raise HatchError("workspace root already exists; init never overwrites")
+    return root, root / f"{name}-workbench", root / f"{name}-product", root / f"{name}-evals"
+
+
+def init_git_repository(path: Path) -> None:
+    result = subprocess.run(
+        ["git", "-C", str(path), "init", "-b", "main"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise HatchError(f"Could not initialize Git repository: {path.name}")
+
+
+def command_init(args: argparse.Namespace) -> int:
+    root, workbench, product, evals = init_workspace_paths(args.parent, args.name)
+    paths = (("workbench", workbench), ("product", product), ("evals", evals))
+    print("INIT PLAN")
+    print(f"- container {root}")
+    for label, path in paths:
+        print(f"- {label} {path}")
+    print("- three independent local Git repositories; no commit, remote, push, release, or deploy")
+    if not args.apply:
+        print("Run again with --apply after confirming this plan.")
+        return 0
+    for value, label in ((args.public_name, "public name"), (args.public_email, "public email")):
+        if not isinstance(value, str) or not value.strip() or "\n" in value or "\r" in value:
+            raise HatchError(f"{label} must be one non-empty line")
+    root.mkdir()
+    for _, path in paths:
+        path.mkdir()
+        init_git_repository(path)
+    quoted_name = json.dumps(args.public_name, ensure_ascii=False)
+    quoted_email = json.dumps(args.public_email, ensure_ascii=False)
+    write_text_new(
+        root / "hatch.toml",
+        f'''schema = {SCHEMA}
+
+[repos]
+workbench = "{args.name}-workbench"
+product = "{args.name}-product"
+evals = "{args.name}-evals"
+
+[records]
+briefs = "{args.name}-workbench/promotions"
+audits = "{args.name}-evals/audits"
+evidence = "{args.name}-evals/evidence"
+gates = "{args.name}-evals/gates"
+
+[policy]
+audit = "{args.name}-workbench/hatch-policy.toml"
+''',
+        "workspace marker",
+    )
+    write_text_new(
+        workbench / "AGENTS.md",
+        """# Workbench
+
+This private repository holds uncertain ideas and Promotion Briefs. Do not
+import files from here into product automatically.
+""",
+        "workbench instructions",
+    )
+    write_text_new(workbench / ".gitignore", ".DS_Store\n.hatch/\nscratch/\n", "workbench ignore file")
+    write_text_new(
+        workbench / "hatch-policy.toml",
+        f'''schema = {SCHEMA}
+
+[identity]
+expected_name = {quoted_name}
+expected_email = {quoted_email}
+
+[terms]
+literal = []
+''',
+        "audit policy",
+    )
+    write_text_new(
+        product / "AGENTS.md",
+        """# Product
+
+This is the public-safe canonical product repository. Keep it independent of
+the sibling repositories and safe to publish from its first commit.
+""",
+        "product instructions",
+    )
+    write_text_new(product / ".gitignore", ".DS_Store\n__pycache__/\n*.py[cod]\n", "product ignore file")
+    write_text_new(product / "VERSION", "0.0.0\n", "initial version")
+    write_text_new(product / "CHANGELOG.md", CHANGELOG_HEADER, "initial version log")
+    write_text_new(
+        evals / "AGENTS.md",
+        """# Evidence
+
+This private repository records whether an exact product commit is sufficient
+in real use. Do not treat an evaluation artifact as product source until it is
+explicitly promoted.
+""",
+        "eval instructions",
+    )
+    write_text_new(evals / ".gitignore", ".DS_Store\nruns/\nraw/\n", "eval ignore file")
+    print(f"INIT CREATED {root}")
+    return 0
+
+
 def git_relative_path(value: str, label: str) -> str:
     path = Path(value)
     if path.is_absolute() or ".." in path.parts or value in ("", "."):
@@ -255,6 +402,123 @@ def record_relative(workspace: Workspace, path: Path) -> str:
 
 def brief_output(workspace: Workspace, brief_id: str, value: str | None) -> Path:
     return safe_output(workspace, workspace.briefs, value, workspace.briefs / brief_id / "brief.json")
+
+
+def version_key(value: str) -> tuple[int, int, int]:
+    match = SEMVER_RE.fullmatch(value)
+    if match is None:
+        raise HatchError("version must use stable semantic version form MAJOR.MINOR.PATCH")
+    return tuple(int(part) for part in match.groups())
+
+
+def brief_version(brief: dict[str, Any]) -> tuple[str, str]:
+    value = brief.get("version")
+    if not isinstance(value, dict):
+        raise HatchError("missing version")
+    target = value.get("target")
+    summary = value.get("summary")
+    if not isinstance(target, str):
+        raise HatchError("missing version target")
+    version_key(target)
+    if not isinstance(summary, str) or not summary.strip() or "\n" in summary or "\r" in summary:
+        raise HatchError("version summary must be one non-empty line")
+    return target, summary.strip()
+
+
+def changelog_entry(version: str, summary: str) -> str:
+    return f"## {version}\n\n{summary}\n"
+
+
+def read_regular_text(path: Path, label: str) -> str | None:
+    if not path.exists():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise HatchError(f"{label} must be a regular file")
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise HatchError(f"Could not read {label}") from exc
+
+
+def git_regular_text(repo: Path, commit: str, relative_path: str) -> str | None:
+    try:
+        mode, kind, object_id, _ = tree_entry(repo, commit, relative_path)
+    except HatchError:
+        return None
+    if mode != "100644" or kind != "blob":
+        return None
+    data = git(repo, "cat-file", "blob", object_id)
+    if b"\0" in data:
+        return None
+    return data.decode("utf-8", "replace")
+
+
+def version_target_reasons(product: Path, target: str, brief: dict[str, Any]) -> list[str]:
+    try:
+        expected, summary = brief_version(brief)
+    except HatchError:
+        return ["brief-version-invalid"]
+    version_text = git_regular_text(product, target, "VERSION")
+    if version_text is None:
+        return ["version-file-missing"]
+    actual = version_text.strip()
+    try:
+        version_key(actual)
+    except HatchError:
+        return ["version-file-invalid"]
+    reasons: list[str] = []
+    if actual != expected:
+        reasons.append("version-target-mismatch")
+    changelog = git_regular_text(product, target, "CHANGELOG.md")
+    if changelog is None or changelog_entry(expected, summary) not in changelog:
+        reasons.append("version-log-missing")
+    return reasons
+
+
+def command_version_apply(args: argparse.Namespace) -> int:
+    workspace = load_workspace(args.workspace)
+    brief_path = input_record(workspace, workspace.briefs, args.brief, "brief")
+    expected, summary = brief_version(read_json(brief_path))
+    version_path = workspace.product / "VERSION"
+    changelog_path = workspace.product / "CHANGELOG.md"
+    current_text = read_regular_text(version_path, "VERSION")
+    current = current_text.strip() if current_text is not None else None
+    if current is not None:
+        version_key(current)
+        if version_key(expected) < version_key(current):
+            raise HatchError("version must not decrease")
+    entry = changelog_entry(expected, summary)
+    changelog = read_regular_text(changelog_path, "CHANGELOG.md")
+    if changelog is None:
+        changelog = CHANGELOG_HEADER
+    if not changelog.startswith(CHANGELOG_HEADER):
+        raise HatchError("CHANGELOG.md must start with '# Changelog'")
+    heading = f"## {expected}\n"
+    if heading in changelog and entry not in changelog:
+        raise HatchError("CHANGELOG.md already has this version with different content")
+    if current == expected and entry in changelog:
+        print(f"VERSION CURRENT {expected}")
+        return 0
+    if entry not in changelog:
+        changelog = CHANGELOG_HEADER + entry + "\n" + changelog[len(CHANGELOG_HEADER) :]
+    replace_regular_text(version_path, f"{expected}\n", "VERSION")
+    replace_regular_text(changelog_path, changelog, "CHANGELOG.md")
+    print(f"VERSION APPLIED {expected}")
+    return 0
+
+
+def command_version_check(args: argparse.Namespace) -> int:
+    workspace = load_workspace(args.workspace)
+    target = git_commit(workspace.product, args.commit)
+    brief_path = input_record(workspace, workspace.briefs, args.brief, "brief")
+    reasons = version_target_reasons(workspace.product, target, read_json(brief_path))
+    if reasons:
+        print("VERSION BLOCKED")
+        for reason in reasons:
+            print(f"- {reason}")
+        return 2
+    print("VERSION VALID")
+    return 0
 
 
 def validate_text(value: Any, label: str, issues: list[str]) -> None:
@@ -366,6 +630,10 @@ def validate_brief(
         validate_text(brief.get("public_assessment"), "public_assessment", incomplete)
         if not isinstance(brief.get("risk_decisions"), list):
             incomplete.append("missing risk_decisions")
+        try:
+            brief_version(brief)
+        except HatchError as exc:
+            incomplete.append(str(exc))
     return errors, incomplete
 
 
@@ -399,6 +667,7 @@ def command_brief_new(args: argparse.Namespace) -> int:
         "state": "draft",
         "source": {"repo": "workbench", "commit": head, "tree": tree, "items": items},
         "product": {"base_commit": product_head, "target_commit": None},
+        "version": {"target": "", "summary": ""},
         "intent": "",
         "in_scope": [],
         "out_of_scope": [],
@@ -555,11 +824,11 @@ def command_audit(args: argparse.Namespace) -> int:
         message, author_name, author_email, committer_name, committer_email = commit_metadata(
             workspace.product, commit
         )
-        scan_text(message, commit, None, terms, findings)
-        scan_text(author_name, commit, None, terms, findings)
-        scan_text(author_email, commit, None, terms, findings)
-        scan_text(committer_name, commit, None, terms, findings)
-        scan_text(committer_email, commit, None, terms, findings)
+        scan_text(message, commit, "commit message", terms, findings)
+        scan_text(author_name, commit, "commit author", terms, findings)
+        scan_text(author_email, commit, "commit author email", terms, findings)
+        scan_text(committer_name, commit, "commit committer", terms, findings)
+        scan_text(committer_email, commit, "commit committer email", terms, findings)
         if expected_name and (author_name != expected_name or committer_name != expected_name):
             findings.append(make_finding("identity-name-mismatch", "warn", commit, None, None))
         if expected_email and (author_email != expected_email or committer_email != expected_email):
@@ -678,6 +947,7 @@ def command_gate(args: argparse.Namespace) -> int:
     base_commit = product.get("base_commit")
     if isinstance(base_commit, str) and not git_is_ancestor(workspace.product, base_commit, target):
         reasons.append("brief-base-is-not-ancestor")
+    reasons.extend(version_target_reasons(workspace.product, target, brief))
     policy, policy_hash = load_policy(workspace)
     if audit.get("kind") != "hatch.audit" or audit.get("schema") != SCHEMA:
         reasons.append("invalid-audit-record")
@@ -822,6 +1092,13 @@ def command_gate(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    init = subparsers.add_parser("init", help="plan or create a new local Hatch workspace")
+    init.add_argument("--parent", required=True)
+    init.add_argument("--name", required=True)
+    init.add_argument("--public-name")
+    init.add_argument("--public-email")
+    init.add_argument("--apply", action="store_true")
+    init.set_defaults(handler=command_init)
     brief = subparsers.add_parser("brief", help="create or check promotion briefs")
     brief_subparsers = brief.add_subparsers(dest="brief_command", required=True)
     brief_new = brief_subparsers.add_parser("new", help="create a source-pinned draft brief")
@@ -834,6 +1111,17 @@ def build_parser() -> argparse.ArgumentParser:
     brief_check.add_argument("--workspace", required=True)
     brief_check.add_argument("--brief", required=True)
     brief_check.set_defaults(handler=command_brief_check)
+    version = subparsers.add_parser("version", help="apply or verify a product version from a brief")
+    version_subparsers = version.add_subparsers(dest="version_command", required=True)
+    version_apply = version_subparsers.add_parser("apply", help="write VERSION and CHANGELOG.md from a brief")
+    version_apply.add_argument("--workspace", required=True)
+    version_apply.add_argument("--brief", required=True)
+    version_apply.set_defaults(handler=command_version_apply)
+    version_check = version_subparsers.add_parser("check", help="verify a commit's version and changelog entry")
+    version_check.add_argument("--workspace", required=True)
+    version_check.add_argument("--commit", required=True)
+    version_check.add_argument("--brief", required=True)
+    version_check.set_defaults(handler=command_version_check)
     audit = subparsers.add_parser("audit", help="scan a product commit or history range")
     audit.add_argument("--workspace", required=True)
     audit.add_argument("--repo", required=True, choices=["product"])

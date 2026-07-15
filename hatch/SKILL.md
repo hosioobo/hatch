@@ -1,6 +1,6 @@
 ---
 name: hatch
-description: Manage a declared Hatch lifecycle workspace only when work crosses its workbench → product → evidence boundary: prepare or apply a promotion, preserve human or automated evaluation evidence, audit public-safety risks, or make a public-readiness gate decision for an exact product commit. Use for an explicit `$hatch` lifecycle request, or implicitly only inside a workspace with a `hatch.toml` marker and one of those lifecycle intents. Do not use for ordinary coding, builds, tests, Git operations, deployments/releases, generic skill creation or installation, or Codex animated-pet work. Bootstrap Hatch itself only after an explicit self-hosting request.
+description: Create or manage a Hatch lifecycle workspace when a project needs a private workbench, a public-safe product repo, and evidence for publication: initialize a new workspace, prepare or apply a promotion, set a product version and version log, preserve evaluation evidence, audit public-safety risks, or make a public-readiness gate decision for an exact product commit. Use for an explicit `$hatch` lifecycle request, or implicitly only inside a workspace with a `hatch.toml` marker and one of those lifecycle intents. Do not use for ordinary coding, builds, tests, Git operations, deployments/releases, generic skill creation or installation, or Codex animated-pet work. Bootstrap Hatch itself only after an explicit self-hosting request.
 ---
 
 # Hatch
@@ -10,6 +10,17 @@ description: Manage a declared Hatch lifecycle workspace only when work crosses 
 Use Hatch to keep exploratory work, canonical product source, and real-world
 evidence distinct. Treat promotion as a deliberate decision backed by one
 concise brief, not as synchronization between repositories.
+
+## Start a project
+
+For a new project, first propose the container path, lowercase workspace name,
+and public Git identity. Run `scripts/hatch.py init` to show the exact three
+repositories. Run it with `--apply` only after the user confirms the plan.
+
+`init` creates a local container, independent workbench/product/evals Git
+repositories, a private audit policy, `VERSION` at `0.0.0`, and an empty
+`CHANGELOG.md`. It never creates a remote, commits, pushes, releases, or
+deploys. Do not use it to reorganize an existing project.
 
 ## Resolve the workspace
 
@@ -35,6 +46,8 @@ Use Hatch for clear requests such as:
 - "이 계획대로 product에 반영해줘."
 - "이 결과를 evidence에 남기고 평가해줘."
 - "이 commit 공개 전 점검해줘."
+- "새 프로젝트용 Hatch workspace를 만들어줘."
+- "이번 공개 버전을 정리해줘."
 
 Do not infer Hatch from "build", "test", "review", "commit", "publish", or
 "deploy" alone.
@@ -56,8 +69,20 @@ Do not infer Hatch from "build", "test", "review", "commit", "publish", or
    as "이 계획대로 반영해줘."
 5. After confirmation, implement only the approved scope in product. Adapt or
    reimplement workbench code when appropriate; never blindly copy or sync it.
-6. Run the relevant native product tests and a staged-diff audit. Show the
-   diff and results. Do not commit or push automatically.
+6. For a public candidate, add a stable version and one-line summary to the
+   brief, then run `scripts/hatch.py version apply`. Run the relevant native
+   product tests and a staged-diff audit. Show the diff and results. Do not
+   commit or push automatically.
+
+## Version
+
+Use [versioning.md](references/versioning.md) when a public candidate needs a
+version. Put the chosen stable version and one-line public summary in the
+Promotion Brief. After explicit confirmation, `version apply` writes `VERSION`
+and a matching `CHANGELOG.md` entry. After the product commit exists, run
+`version check` against that exact commit.
+
+Never create a tag, GitHub release, or push as part of versioning.
 
 ## Record evidence
 
@@ -77,6 +102,7 @@ the current brief. Do not promote raw eval output automatically.
 
 Run `scripts/hatch.py audit` against an explicit product ref or history range.
 Use the workspace's private audit policy for project-specific terms.
+It scans tracked file contents and paths, commit messages, and Git identities.
 Report mechanical findings and coverage gaps plainly. An audit `PASS` means no
 mechanical finding in the scanned scope; never call that a safety guarantee.
 
@@ -84,8 +110,8 @@ mechanical finding in the scanned scope; never call that a safety guarantee.
 
 Run `scripts/hatch.py gate` only for an exact product commit. It verifies that
 each required evidence item and its declared acceptance linkage are complete
-and tied to that commit. Return `READY`, `BLOCKED`, or `NEEDS-EVIDENCE`; do not
-push.
+and tied to that commit, and that the brief's version and version log match the
+commit. Return `READY`, `BLOCKED`, or `NEEDS-EVIDENCE`; do not push.
 
 ## Bootstrap Hatch
 

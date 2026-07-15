@@ -1,4 +1,4 @@
 interface:
   display_name: "Hatch / 해치"
-  short_description: "Promote projects with evidence and public-safe gates"
-  default_prompt: "Use $hatch to prepare this workbench candidate for promotion to product."
+  short_description: "Start, promote, version, and gate projects"
+  default_prompt: "Use $hatch to create a new public-safe project workspace."
