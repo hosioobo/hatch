@@ -268,6 +268,19 @@ def init_git_repository(path: Path) -> None:
         raise HatchError(f"Could not initialize Git repository: {path.name}")
 
 
+def configure_public_identity(path: Path, name: str, email: str) -> None:
+    for key, value in (("user.name", name), ("user.email", email)):
+        result = subprocess.run(
+            ["git", "-C", str(path), "config", key, value],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise HatchError(f"Could not configure public Git identity: {path.name}")
+
+
 def command_init(args: argparse.Namespace) -> int:
     root, workbench, product, evals = init_workspace_paths(args.parent, args.name)
     paths = (("workbench", workbench), ("product", product), ("evals", evals))
@@ -286,6 +299,7 @@ def command_init(args: argparse.Namespace) -> int:
     for _, path in paths:
         path.mkdir()
         init_git_repository(path)
+    configure_public_identity(product, args.public_name, args.public_email)
     quoted_name = json.dumps(args.public_name, ensure_ascii=False)
     quoted_email = json.dumps(args.public_email, ensure_ascii=False)
     write_text_new(

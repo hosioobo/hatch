@@ -174,8 +174,11 @@ literal = ["private-name"]
         for name in ("luna-workbench", "luna-product", "luna-evals"):
             repo = root / name
             self.assertEqual(self.git(repo, "rev-parse", "--show-toplevel").stdout.strip(), str(repo.resolve()))
-        self.assertEqual((root / "luna-product" / "VERSION").read_text(encoding="utf-8"), "0.0.0\n")
-        self.assertEqual((root / "luna-product" / "CHANGELOG.md").read_text(encoding="utf-8"), "# Changelog\n\n")
+        product = root / "luna-product"
+        self.assertEqual(self.git(product, "config", "user.name").stdout.strip(), "public-author")
+        self.assertEqual(self.git(product, "config", "user.email").stdout.strip(), "public@example.invalid")
+        self.assertEqual((product / "VERSION").read_text(encoding="utf-8"), "0.0.0\n")
+        self.assertEqual((product / "CHANGELOG.md").read_text(encoding="utf-8"), "# Changelog\n\n")
         repeated = self.run_cli("init", "--parent", str(parent), "--name", "luna")
         self.assertEqual(repeated.returncode, 1)
         self.assertIn("already exists", repeated.stderr)
