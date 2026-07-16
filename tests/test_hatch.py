@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -90,6 +91,8 @@ literal = ["private-name"]
         target: str | None = None,
         version: str = "0.1.0",
         summary: str = "First public release.",
+        release_kind: str = "minor",
+        rationale: str = "Add the first backward-compatible public capability.",
     ) -> None:
         brief = json.loads(path.read_text(encoding="utf-8"))
         brief.update(
@@ -108,7 +111,12 @@ literal = ["private-name"]
                 ],
                 "public_assessment": "No known private material belongs in product.",
                 "risk_decisions": [],
-                "version": {"target": version, "summary": summary},
+                "version": {
+                    "target": version,
+                    "summary": summary,
+                    "release_kind": release_kind,
+                    "rationale": rationale,
+                },
             }
         )
         if target is not None:
@@ -225,6 +233,144 @@ literal = ["private-name"]
         self.assertIn("configured-term at commit message", result.stdout)
         self.assertNotIn("private-name", result.stdout + result.stderr)
 
+    def test_version_requires_the_exact_release_kind_increment(self) -> None:
+        created = self.run_cli(
+            "brief",
+            "new",
+            "--workspace",
+            str(self.root),
+            "--id",
+            "demo-version",
+            "--item",
+            "idea.txt",
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        brief_relative = "demo-workbench/promotions/demo-version/brief.json"
+        brief_path = self.root / brief_relative
+        self.fill_brief(brief_path, version="0.1.0", release_kind="patch")
+        invalid = self.run_cli(
+            "version",
+            "apply",
+            "--workspace",
+            str(self.root),
+            "--brief",
+            brief_relative,
+        )
+        self.assertEqual(invalid.returncode, 1)
+        self.assertIn("does not match release kind", invalid.stderr)
+        self.fill_brief(brief_path, version="0.0.1", release_kind="patch")
+        applied = self.run_cli(
+            "version",
+            "apply",
+            "--workspace",
+            str(self.root),
+            "--brief",
+            brief_relative,
+        )
+        self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+        self.assertEqual((self.product / "VERSION").read_text(encoding="utf-8"), "0.0.1\n")
+
+    def test_audit_accepts_manifested_binary_and_rejects_hash_mismatch(self) -> None:
+        policy = self.workbench / "hatch-policy.toml"
+        policy.write_text(
+            policy.read_text(encoding="utf-8")
+            + """
+[binary_manifest]
+path = "assets/manifest.json"
+""",
+            encoding="utf-8",
+        )
+        base = self.git(self.product, "rev-parse", "HEAD").stdout.strip()
+        asset = self.product / "assets" / "portrait.png"
+        asset.parent.mkdir()
+        first_bytes = b"\x89PNG\r\n\x1a\n\0first-portrait"
+        asset.write_bytes(first_bytes)
+        manifest = {
+            "schema": 1,
+            "kind": "hatch.binary-manifest",
+            "assets": [
+                {
+                    "path": "assets/portrait.png",
+                    "sha256": hashlib.sha256(first_bytes).hexdigest(),
+                    "bytes": len(first_bytes),
+                    "source": "Original Hatch character artwork.",
+                    "purpose": "Runtime character portrait.",
+                    "reviewed": True,
+                }
+            ],
+        }
+        manifest_path = asset.parent / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        covered_target = self.commit(self.product, "add reviewed portrait")
+        covered = self.run_cli(
+            "audit",
+            "--workspace",
+            str(self.root),
+            "--repo",
+            "product",
+            "--ref",
+            covered_target,
+            "--base",
+            base,
+        )
+        self.assertEqual(covered.returncode, 0, covered.stdout + covered.stderr)
+        covered_report = json.loads(
+            (self.evals / "audits" / f"{covered_target[:12]}.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(covered_report["coverage_gaps"], [])
+        self.assertEqual(covered_report["binary_coverage"][0]["path"], "assets/portrait.png")
+
+        asset.write_bytes(b"\x89PNG\r\n\x1a\n\0changed-portrait")
+        mismatched_target = self.commit(self.product, "change portrait without review")
+        mismatched = self.run_cli(
+            "audit",
+            "--workspace",
+            str(self.root),
+            "--repo",
+            "product",
+            "--ref",
+            mismatched_target,
+            "--base",
+            covered_target,
+        )
+        self.assertEqual(mismatched.returncode, 2, mismatched.stdout + mismatched.stderr)
+        mismatched_report = json.loads(
+            (self.evals / "audits" / f"{mismatched_target[:12]}.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(mismatched_report["coverage_gaps"][0]["reason"], "binary-manifest-hash-mismatch")
+
+        changed_bytes = asset.read_bytes()
+        manifest["assets"][0]["sha256"] = hashlib.sha256(changed_bytes).hexdigest()
+        manifest["assets"][0]["bytes"] = len(changed_bytes)
+        manifest["assets"].append(
+            {
+                "path": "assets/unused.png",
+                "sha256": hashlib.sha256(b"unused").hexdigest(),
+                "bytes": len(b"unused"),
+                "source": "Unused example.",
+                "purpose": "Should be rejected as stale.",
+                "reviewed": True,
+            }
+        )
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        stale_target = self.commit(self.product, "add stale binary manifest entry")
+        stale = self.run_cli(
+            "audit",
+            "--workspace",
+            str(self.root),
+            "--repo",
+            "product",
+            "--ref",
+            stale_target,
+            "--base",
+            mismatched_target,
+        )
+        self.assertEqual(stale.returncode, 2, stale.stdout + stale.stderr)
+        stale_report = json.loads(
+            (self.evals / "audits" / f"{stale_target[:12]}.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(stale_report["coverage_gaps"][0]["reason"], "binary-manifest-stale-entry")
+
     def test_ready_accepts_exact_commit_with_matching_evidence(self) -> None:
         created = self.run_cli(
             "brief",
@@ -240,6 +386,40 @@ literal = ["private-name"]
         brief_relative = "demo-workbench/promotions/demo-ready/brief.json"
         brief_path = self.root / brief_relative
         self.fill_brief(brief_path)
+        policy = self.workbench / "hatch-policy.toml"
+        policy.write_text(
+            policy.read_text(encoding="utf-8")
+            + """
+[binary_manifest]
+path = "assets/manifest.json"
+""",
+            encoding="utf-8",
+        )
+        asset = self.product / "assets" / "reviewed.png"
+        asset.parent.mkdir()
+        asset_bytes = b"\x89PNG\r\n\x1a\n\0reviewed-ready-asset"
+        asset.write_bytes(asset_bytes)
+        (asset.parent / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "kind": "hatch.binary-manifest",
+                    "assets": [
+                        {
+                            "path": "assets/reviewed.png",
+                            "sha256": hashlib.sha256(asset_bytes).hexdigest(),
+                            "bytes": len(asset_bytes),
+                            "source": "Reviewed test asset.",
+                            "purpose": "Readiness integration coverage.",
+                            "reviewed": True,
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         applied_version = self.run_cli(
             "version",
             "apply",

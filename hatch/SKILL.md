@@ -66,9 +66,9 @@ Do not infer Hatch from "build", "test", "review", "commit", "publish", or
    as "이 계획대로 반영해줘."
 4. After confirmation, implement only the approved scope in product. Adapt or
    reimplement workbench code when appropriate; never blindly copy or sync it.
-5. For a public candidate, add a stable version and one-line summary to the
-   brief, then run `scripts/hatch.py version apply`. Run the relevant native
-   product tests and show the staged diff.
+5. For a public candidate, add a stable version, release kind, one-line summary,
+   and one-line rationale to the brief, then run `scripts/hatch.py version
+   apply`. Run the relevant native product tests and show the staged diff.
 6. Once an exact product commit exists, audit that commit's history, messages,
    identities, paths, and files. Record the relevant human or automated
    evidence, then run the internal readiness check. Do not push automatically.
@@ -76,10 +76,12 @@ Do not infer Hatch from "build", "test", "review", "commit", "publish", or
 ## Version
 
 Use [versioning.md](references/versioning.md) when a public candidate needs a
-version. Put the chosen stable version and one-line public summary in the
-Promotion Brief. After explicit confirmation, `version apply` writes `VERSION`
-and a matching `CHANGELOG.md` entry. After the product commit exists, run
-`version check` against that exact commit.
+version. Put the chosen stable version, `patch`/`minor`/`major` release kind,
+one-line public summary, and one-line rationale in the Promotion Brief. Hatch
+checks that the target is the exact next version for that kind from the brief's
+product base. After explicit confirmation, `version apply` writes `VERSION` and
+a matching `CHANGELOG.md` entry. After the product commit exists, run `version
+check` against that exact commit.
 
 Never create a tag, GitHub release, or push as part of versioning.
 
@@ -105,6 +107,12 @@ Use the workspace's private audit policy for project-specific terms.
 It scans tracked file contents and paths, commit messages, and Git identities.
 Report mechanical findings and coverage gaps plainly. An audit `PASS` means no
 mechanical finding in the scanned scope; never call that a safety guarantee.
+
+For intentional binary product assets, configure one tracked product manifest
+in the audit policy and follow [binary-manifest.md](references/binary-manifest.md).
+Hatch checks its path, byte count, SHA-256, source, purpose, and review
+attestation in every audited commit. An absent, stale, malformed, or mismatched
+entry remains a blocking coverage gap.
 
 The readiness check is the last internal step of Promote, not another workflow
 for the user to remember. Run `scripts/hatch.py ready` only for the exact

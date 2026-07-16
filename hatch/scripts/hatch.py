@@ -424,6 +424,17 @@ def version_key(value: str) -> tuple[int, int, int]:
     return tuple(int(part) for part in match.groups())
 
 
+def next_version(current: tuple[int, int, int], release_kind: str) -> tuple[int, int, int]:
+    major, minor, patch = current
+    if release_kind == "patch":
+        return major, minor, patch + 1
+    if release_kind == "minor":
+        return major, minor + 1, 0
+    if release_kind == "major":
+        return major + 1, 0, 0
+    raise HatchError("release kind must be patch, minor, or major")
+
+
 def brief_version(brief: dict[str, Any]) -> tuple[str, str]:
     value = brief.get("version")
     if not isinstance(value, dict):
@@ -436,6 +447,20 @@ def brief_version(brief: dict[str, Any]) -> tuple[str, str]:
     if not isinstance(summary, str) or not summary.strip() or "\n" in summary or "\r" in summary:
         raise HatchError("version summary must be one non-empty line")
     return target, summary.strip()
+
+
+def brief_release(brief: dict[str, Any]) -> tuple[str, str, str, str]:
+    target, summary = brief_version(brief)
+    value = brief.get("version")
+    if not isinstance(value, dict):
+        raise HatchError("missing version")
+    release_kind = value.get("release_kind")
+    rationale = value.get("rationale")
+    if release_kind not in {"patch", "minor", "major"}:
+        raise HatchError("release kind must be patch, minor, or major")
+    if not isinstance(rationale, str) or not rationale.strip() or "\n" in rationale or "\r" in rationale:
+        raise HatchError("version rationale must be one non-empty line")
+    return target, summary, release_kind, rationale.strip()
 
 
 def changelog_entry(version: str, summary: str) -> str:
@@ -468,7 +493,7 @@ def git_regular_text(repo: Path, commit: str, relative_path: str) -> str | None:
 
 def version_target_reasons(product: Path, target: str, brief: dict[str, Any]) -> list[str]:
     try:
-        expected, summary = brief_version(brief)
+        expected, summary, release_kind, _ = brief_release(brief)
     except HatchError:
         return ["brief-version-invalid"]
     version_text = git_regular_text(product, target, "VERSION")
@@ -482,6 +507,18 @@ def version_target_reasons(product: Path, target: str, brief: dict[str, Any]) ->
     reasons: list[str] = []
     if actual != expected:
         reasons.append("version-target-mismatch")
+    product_brief = brief.get("product")
+    base_commit = product_brief.get("base_commit") if isinstance(product_brief, dict) else None
+    if isinstance(base_commit, str):
+        base_version = git_regular_text(product, base_commit, "VERSION")
+        if base_version is None:
+            reasons.append("version-base-missing")
+        else:
+            try:
+                if version_key(expected) != next_version(version_key(base_version.strip()), release_kind):
+                    reasons.append("version-release-kind-mismatch")
+            except HatchError:
+                reasons.append("version-base-invalid")
     changelog = git_regular_text(product, target, "CHANGELOG.md")
     if changelog is None or changelog_entry(expected, summary) not in changelog:
         reasons.append("version-log-missing")
@@ -491,15 +528,18 @@ def version_target_reasons(product: Path, target: str, brief: dict[str, Any]) ->
 def command_version_apply(args: argparse.Namespace) -> int:
     workspace = load_workspace(args.workspace)
     brief_path = input_record(workspace, workspace.briefs, args.brief, "brief")
-    expected, summary = brief_version(read_json(brief_path))
+    expected, summary, release_kind, _ = brief_release(read_json(brief_path))
     version_path = workspace.product / "VERSION"
     changelog_path = workspace.product / "CHANGELOG.md"
     current_text = read_regular_text(version_path, "VERSION")
     current = current_text.strip() if current_text is not None else None
     if current is not None:
-        version_key(current)
-        if version_key(expected) < version_key(current):
+        current_key = version_key(current)
+        expected_key = version_key(expected)
+        if expected_key < current_key:
             raise HatchError("version must not decrease")
+        if expected != current and expected_key != next_version(current_key, release_kind):
+            raise HatchError("version target does not match release kind")
     entry = changelog_entry(expected, summary)
     changelog = read_regular_text(changelog_path, "CHANGELOG.md")
     if changelog is None:
@@ -644,7 +684,7 @@ def validate_brief(
         if not isinstance(brief.get("risk_decisions"), list):
             incomplete.append("missing risk_decisions")
         try:
-            brief_version(brief)
+            brief_release(brief)
         except HatchError as exc:
             incomplete.append(str(exc))
     return errors, incomplete
@@ -736,6 +776,89 @@ def configured_terms(policy: dict[str, Any]) -> list[str]:
     return literals
 
 
+def configured_binary_manifest(policy: dict[str, Any]) -> str | None:
+    manifest = policy.get("binary_manifest")
+    if manifest is None:
+        return None
+    if not isinstance(manifest, dict):
+        raise HatchError("audit policy binary_manifest must be a table")
+    path = manifest.get("path")
+    if not isinstance(path, str):
+        raise HatchError("audit policy binary_manifest.path must be a string")
+    return git_relative_path(path, "binary manifest path")
+
+
+def binary_manifest_for_commit(
+    repo: Path, commit: str, relative_path: str
+) -> tuple[dict[str, dict[str, Any]] | None, str | None]:
+    try:
+        mode, kind, object_id, _ = tree_entry(repo, commit, relative_path)
+    except HatchError:
+        return None, "binary-manifest-missing"
+    if mode != "100644" or kind != "blob":
+        return None, "binary-manifest-not-regular"
+    data = git(repo, "cat-file", "blob", object_id)
+    if len(data) > MAX_TEXT_BYTES or b"\0" in data:
+        return None, "binary-manifest-not-text"
+    try:
+        manifest = json.loads(
+            data.decode("utf-8"),
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_json_constant,
+        )
+    except (UnicodeError, ValueError, json.JSONDecodeError):
+        return None, "binary-manifest-invalid"
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema") != SCHEMA
+        or manifest.get("kind") != "hatch.binary-manifest"
+    ):
+        return None, "binary-manifest-invalid"
+    assets = manifest.get("assets")
+    if not isinstance(assets, list):
+        return None, "binary-manifest-invalid"
+    entries: dict[str, dict[str, Any]] = {}
+    for asset in assets:
+        if not isinstance(asset, dict):
+            return None, "binary-manifest-invalid"
+        path = asset.get("path")
+        digest = asset.get("sha256")
+        size = asset.get("bytes")
+        source = asset.get("source")
+        purpose = asset.get("purpose")
+        if (
+            not isinstance(path, str)
+            or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or type(size) is not int
+            or size < 0
+            or not isinstance(source, str)
+            or not source.strip()
+            or not isinstance(purpose, str)
+            or not purpose.strip()
+            or asset.get("reviewed") is not True
+        ):
+            return None, "binary-manifest-invalid"
+        try:
+            relative_asset_path = git_relative_path(path, "binary manifest asset path")
+        except HatchError:
+            return None, "binary-manifest-invalid"
+        if relative_asset_path in entries:
+            return None, "binary-manifest-invalid"
+        entries[relative_asset_path] = asset
+    return entries, None
+
+
+def binary_manifest_reason(asset: dict[str, Any] | None, data: bytes) -> str | None:
+    if asset is None:
+        return "binary-manifest-entry-missing"
+    if asset["sha256"] != sha256_bytes(data):
+        return "binary-manifest-hash-mismatch"
+    if asset["bytes"] != len(data):
+        return "binary-manifest-size-mismatch"
+    return None
+
+
 def make_finding(rule: str, severity: str, object_id: str, path: str | None, line: int | None) -> dict[str, Any]:
     stable = "|".join((rule, object_id, path or "", str(line or 0))).encode("utf-8", "surrogateescape")
     return {
@@ -823,6 +946,7 @@ def command_audit(args: argparse.Namespace) -> int:
         base_commit = base_value
     policy, policy_hash = load_policy(workspace)
     terms = configured_terms(policy)
+    binary_manifest_path = configured_binary_manifest(policy)
     commits, coverage, gaps = audit_commits(workspace.product, ref, base_commit)
     findings: list[dict[str, Any]] = []
     identity = policy.get("identity", {}) if isinstance(policy.get("identity", {}), dict) else {}
@@ -833,6 +957,7 @@ def command_audit(args: argparse.Namespace) -> int:
     if expected_email is not None and not isinstance(expected_email, str):
         raise HatchError("identity.expected_email must be a string")
     blob_paths: dict[tuple[str, str], None] = {}
+    blob_commits: dict[tuple[str, str], set[str]] = {}
     for commit in commits:
         message, author_name, author_email, committer_name, committer_email = commit_metadata(
             workspace.product, commit
@@ -854,20 +979,76 @@ def command_audit(args: argparse.Namespace) -> int:
                 gaps.append({"kind": "git-entry", "object": object_id, "path": path, "reason": "non-blob"})
                 continue
             blob_paths[(object_id, path)] = None
+            blob_commits.setdefault((object_id, path), set()).add(commit)
+    manifest_cache: dict[str, tuple[dict[str, dict[str, Any]] | None, str | None]] = {}
+    binary_coverage: list[dict[str, Any]] = []
+    binary_paths_by_commit: dict[str, set[str]] = {}
     for object_id, path in blob_paths:
         scan_path(path, object_id, terms, findings)
         data = git(workspace.product, "cat-file", "blob", object_id)
+        if b"\0" in data:
+            for commit in sorted(blob_commits[(object_id, path)]):
+                binary_paths_by_commit.setdefault(commit, set()).add(path)
+                if binary_manifest_path is None:
+                    reason = "binary"
+                else:
+                    if commit not in manifest_cache:
+                        manifest_cache[commit] = binary_manifest_for_commit(
+                            workspace.product, commit, binary_manifest_path
+                        )
+                    manifest, manifest_error = manifest_cache[commit]
+                    reason = manifest_error or binary_manifest_reason(
+                        manifest.get(path) if manifest else None, data
+                    )
+                if reason is None:
+                    binary_coverage.append(
+                        {
+                            "commit": commit,
+                            "object": object_id,
+                            "path": path,
+                            "sha256": sha256_bytes(data),
+                            "bytes": len(data),
+                            "manifest": binary_manifest_path,
+                        }
+                    )
+                else:
+                    gaps.append(
+                        {
+                            "kind": "blob",
+                            "commit": commit,
+                            "object": object_id,
+                            "path": path,
+                            "reason": reason,
+                        }
+                    )
+            continue
         if len(data) > MAX_TEXT_BYTES:
             gaps.append({"kind": "blob", "object": object_id, "path": path, "reason": "oversized"})
-            continue
-        if b"\0" in data:
-            gaps.append({"kind": "blob", "object": object_id, "path": path, "reason": "binary"})
             continue
         text = data.decode("utf-8", "replace")
         if text.startswith("version https://git-lfs.github.com/spec/v1"):
             gaps.append({"kind": "blob", "object": object_id, "path": path, "reason": "lfs-pointer"})
             continue
         scan_text(text, object_id, path, terms, findings)
+    if binary_manifest_path is not None:
+        for commit in commits:
+            if commit not in manifest_cache:
+                manifest_cache[commit] = binary_manifest_for_commit(
+                    workspace.product, commit, binary_manifest_path
+                )
+            manifest, _ = manifest_cache[commit]
+            if manifest is None:
+                continue
+            for path in manifest:
+                if path not in binary_paths_by_commit.get(commit, set()):
+                    gaps.append(
+                        {
+                            "kind": "blob",
+                            "commit": commit,
+                            "path": path,
+                            "reason": "binary-manifest-stale-entry",
+                        }
+                    )
     deduplicated = {finding["id"]: finding for finding in findings}
     findings = [deduplicated[key] for key in sorted(deduplicated)]
     severities = {finding["severity"] for finding in findings}
@@ -882,6 +1063,7 @@ def command_audit(args: argparse.Namespace) -> int:
         "policy_hash": policy_hash,
         "findings": findings,
         "coverage_gaps": gaps,
+        "binary_coverage": binary_coverage,
         "status": status,
     }
     output = safe_output(

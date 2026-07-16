@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0
+
+Recognize reviewed binary asset manifests during audit.
+
 ## 0.1.2
 
 Document workspace boundaries and detailed command flow.
