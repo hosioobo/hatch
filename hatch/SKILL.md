@@ -79,9 +79,11 @@ Use [versioning.md](references/versioning.md) when a public candidate needs a
 version. Put the chosen stable version, `patch`/`minor`/`major` release kind,
 one-line public summary, and one-line rationale in the Promotion Brief. Hatch
 checks that the target is the exact next version for that kind from the brief's
-product base. After explicit confirmation, `version apply` writes `VERSION` and
-a matching `CHANGELOG.md` entry. After the product commit exists, run `version
-check` against that exact commit.
+product base. Classify the public contract rather than the diff size: ordinary
+corrections and maintenance are `patch`; a new opt-in capability, workflow, or
+policy is `minor`. After explicit confirmation, `version apply` writes `VERSION`
+and a matching `CHANGELOG.md` entry. After the product commit exists, run
+`version check` against that exact commit.
 
 Never create a tag, GitHub release, or push as part of versioning.
 

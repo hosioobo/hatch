@@ -16,9 +16,18 @@ release kinds and keep both the summary and rationale to one public-safe line:
 
 | Kind | Exact next version | Use for |
 | --- | --- | --- |
-| `patch` | `MAJOR.MINOR.(PATCH + 1)` | Fixes and corrections without a new public capability. |
-| `minor` | `MAJOR.(MINOR + 1).0` | A new backward-compatible public capability. |
+| `patch` | `MAJOR.MINOR.(PATCH + 1)` | A fix, correction, documentation, or maintenance update to an existing public promise. |
+| `minor` | `MAJOR.(MINOR + 1).0` | A new backward-compatible public capability, workflow, or policy that users can opt into. |
 | `major` | `(MAJOR + 1).0.0` | An intentional breaking public contract change. |
+
+Classify the public contract, not the size of the diff. “Regular update” is a
+changelog description, not a fourth version tier: use `patch` unless the user
+can newly do something or must change how they use the product.
+
+Before 1.0, retain the same distinction: use `0.y.x` for corrections to a
+declared contract and `0.(y+1).0` for a new explicit workflow, policy, or
+capability. Do not use the pre-1.0 status to turn every ordinary update into a
+minor release.
 
 Hatch compares the target to the Promotion Brief's product base commit. It does
 not infer a release kind from the diff. After explicit confirmation, run:

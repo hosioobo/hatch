@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "kind": "hatch.binary-manifest",
+  "assets": [
+    {
+      "path": "assets/hatch-icon-v1.png",
+      "sha256": "3977b1c57eff19c1645b3c8f6eb7003a165e484254837955a884d0ed0af67263",
+      "bytes": 223510,
+      "source": "Original Hatch image generated from its approved mascot design.",
+      "purpose": "Persistent navigation icon for the public Hatch landing page.",
+      "reviewed": true
+    },
+    {
+      "path": "assets/hatch-mascot-v1.png",
+      "sha256": "5abcf566c9b4b6cf999b57fc733b6e0f78532b8f71b39c227b6b18c9ea7913fa",
+      "bytes": 626945,
+      "source": "Original Hatch image generated from approved visual references.",
+      "purpose": "Hero mascot for the public Hatch landing page.",
+      "reviewed": true
+    }
+  ]
+}

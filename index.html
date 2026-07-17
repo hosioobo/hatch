@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Hatch keeps private exploration and public product work separate.">
+    <title>Hatch — Keep the mess. Ship the good part.</title>
+    <style>
+      :root {
+        --ink: #071b3d;
+        --paper: #fff0bb;
+        --lime: #ffd21a;
+        --green: #06417f;
+        --line: #83aac2;
+        --soft-green: #ccecf4;
+      }
+
+      * { box-sizing: border-box; }
+
+      html { scroll-behavior: smooth; }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font-family: Georgia, "Times New Roman", serif;
+        line-height: 1.5;
+      }
+
+      a { color: inherit; }
+
+      .shell { max-width: 1120px; margin: 0 auto; padding-inline: clamp(20px, 4vw, 28px); }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--paper);
+        border-bottom: 1px solid var(--line);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      nav {
+        min-height: 74px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .brand { display: inline-flex; width: 38px; height: 38px; align-items: center; text-decoration: none; }
+      .brand svg, .brand img { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+      .nav-links { display: flex; gap: 20px; font-size: 0.83rem; }
+      .nav-links a { text-underline-offset: 4px; }
+
+      .hero {
+        padding-block: 94px 76px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+        gap: 62px;
+        align-items: end;
+      }
+
+      .eyebrow, .label {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow { color: var(--green); margin: 0 0 20px; }
+
+      h1, h2, h3, p { margin-top: 0; }
+
+      h1 {
+        max-width: 720px;
+        margin-bottom: 24px;
+        font-size: clamp(3.7rem, 9vw, 7.6rem);
+        line-height: 0.87;
+        letter-spacing: -0.075em;
+        font-weight: 500;
+      }
+
+      .hero h1 { font-size: clamp(5.6rem, 12vw, 10.6rem); }
+
+      .lead { max-width: 530px; font-size: 1.3rem; line-height: 1.35; }
+
+      .button {
+        display: inline-block;
+        padding: 13px 18px;
+        margin-top: 10px;
+        color: var(--ink);
+        background: var(--lime);
+        border: 1px solid var(--ink);
+        border-radius: 999px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-decoration: none;
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+
+      .button:hover { transform: translate(1px, 1px); box-shadow: 2px 2px 0 var(--ink); }
+
+      .hatch-mark {
+        min-height: 350px;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: var(--green);
+        color: var(--paper);
+        border-radius: 46% 54% 48% 52% / 50% 42% 58% 50%;
+        transform: rotate(3deg);
+      }
+
+      .hatch-mark span { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.75rem; }
+      .hatch-creature { display: block; width: min(100%, 345px); margin: -9px auto -28px; image-rendering: pixelated; }
+
+      section { border-top: 1px solid var(--line); padding: 76px 0; }
+
+      .section-head { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 30px; margin-bottom: 34px; }
+      .section-head h2 { margin: 0; max-width: 680px; font-size: clamp(2rem, 4vw, 3.45rem); line-height: 1; letter-spacing: -0.05em; font-weight: 500; }
+      .section-head .label { padding-top: 9px; color: var(--green); }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.1fr);
+        gap: 28px;
+      }
+
+      pre {
+        margin: 0;
+        padding: 24px;
+        overflow-x: auto;
+        color: var(--paper);
+        background: var(--ink);
+        border-radius: 10px;
+        font: 0.82rem/1.75 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      .boundary-list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+      .boundary-list div { padding: 19px 20px; background: var(--paper); }
+      .boundary-list strong { display: block; margin-bottom: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.82rem; }
+      .boundary-list p { margin: 0; font-size: 0.98rem; }
+
+      .commands { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+      .command { padding: 28px; background: var(--soft-green); border: 1px solid var(--ink); border-radius: 10px; }
+      .command h3 { margin-bottom: 14px; font: 800 1rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .command p { font-size: 1.08rem; }
+      .command ol { padding-left: 20px; margin: 18px 0 0; }
+      .command li { margin: 7px 0; }
+      code { padding: 0.12em 0.35em; background: rgba(24, 38, 30, 0.1); border-radius: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.86em; }
+
+      .command small { display: block; margin-top: 22px; color: var(--green); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.72rem; }
+
+      .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; border: 1px solid var(--line); background: var(--line); }
+      .step { min-height: 170px; padding: 22px; background: var(--paper); }
+      .step b { display: block; margin-bottom: 28px; color: var(--green); font: 0.75rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .step span { font-size: 1.2rem; line-height: 1.1; }
+
+      .closing { padding-bottom: 96px; text-align: center; }
+      .closing h2 { max-width: 740px; margin: 0 auto 22px; font-size: clamp(2.5rem, 5vw, 4.6rem); line-height: 0.95; letter-spacing: -0.06em; font-weight: 500; }
+      .closing p { max-width: 520px; margin: 0 auto 18px; font-size: 1.12rem; }
+
+      footer { padding: 22px 0; border-top: 1px solid var(--line); font: 0.72rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      footer .shell { display: flex; justify-content: space-between; gap: 16px; }
+
+      @media (max-width: 760px) {
+        .hero, .workspace, .section-head { grid-template-columns: 1fr; }
+        .hero { padding-block: 64px; gap: 40px; }
+        .section-head { gap: 12px; }
+        .section-head .label { padding-top: 0; }
+        .commands, .steps { grid-template-columns: 1fr; }
+        .hatch-mark { min-height: 270px; }
+        .nav-links { gap: 12px; font-size: 0.72rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav class="shell" aria-label="Main navigation">
+        <a class="brand" href="#top">
+          <img src="assets/hatch-icon-v1.png" alt="">
+          <span class="sr-only">Hatch</span>
+        </a>
+        <div class="nav-links">
+          <a href="#workspace">Workspace</a>
+          <a href="#commands">Commands</a>
+          <a href="README.md">Docs</a>
+          <a href="https://github.com/hosioobo/hatch">GitHub ↗</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top">
+      <div class="shell hero">
+        <div>
+          <p class="eyebrow">A small lifecycle for solo makers</p>
+          <h1>Hatch</h1>
+          <p class="lead">Keep the mess. Ship the good part.</p>
+          <a class="button" href="README.md">Read the docs</a>
+        </div>
+        <aside class="hatch-mark" aria-label="Hatch mascot">
+          <span>private workbench → public product</span>
+          <img class="hatch-creature" src="assets/hatch-mascot-v1.png" alt="An original pixel-art Hatch creature with antlers and a curled tail.">
+        </aside>
+      </div>
+
+      <section id="workspace">
+        <div class="shell">
+          <div class="section-head">
+            <p class="label">01 / Boundaries</p>
+            <h2>One project. Three honest places for work.</h2>
+          </div>
+          <div class="workspace">
+            <pre aria-label="Hatch workspace structure">my-project/
+├── hatch.toml
+├── my-project-workbench/
+├── my-project-product/
+└── my-project-evals/</pre>
+            <div class="boundary-list">
+              <div><strong>workbench / private</strong><p>Drafts, experiments, notes, and the brief for what should move.</p></div>
+              <div><strong>product / public-safe</strong><p>The focused source repository you can share, version, and push.</p></div>
+              <div><strong>evals / private</strong><p>Human observations and automated evidence for one exact product commit.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="commands">
+        <div class="shell">
+          <div class="section-head">
+            <p class="label">02 / Commands</p>
+            <h2>Only two commands to remember.</h2>
+          </div>
+          <div class="commands">
+            <article class="command">
+              <h3>$hatch init</h3>
+              <p>Start a project without turning your first day into repository housekeeping.</p>
+              <ol>
+                <li>Choose the project name and public Git identity.</li>
+                <li>Create the container and three independent Git repositories.</li>
+                <li>Write the workspace marker, private audit policy, version file, and changelog.</li>
+              </ol>
+              <small>Use <code>--dry-run</code> to see the plan first. No remote, commit, or push.</small>
+            </article>
+            <article class="command">
+              <h3>$hatch promote</h3>
+              <p>Move a selected piece of work across the public boundary without relying on a fresh prompt every time.</p>
+              <ol>
+                <li>Write and confirm a brief for what moves and what stays behind.</li>
+                <li>Record the version, test the product, and commit the approved snapshot.</li>
+                <li>Audit the exact commit, attach evidence, and check whether it is ready to push.</li>
+              </ol>
+              <small>Reports <code>READY TO PUSH</code>, <code>NOT READY</code>, or <code>NEEDS EVIDENCE</code>. Never pushes alone.</small>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="shell">
+          <div class="section-head">
+            <p class="label">03 / Promotion</p>
+            <h2>Promotion is a small, repeatable decision.</h2>
+          </div>
+          <div class="steps" aria-label="Promotion flow">
+            <div class="step"><b>01</b><span>Brief the exact work.</span></div>
+            <div class="step"><b>02</b><span>Confirm the public scope.</span></div>
+            <div class="step"><b>03</b><span>Version and audit the commit.</span></div>
+            <div class="step"><b>04</b><span>Connect evidence, then decide.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing">
+        <div class="shell">
+          <p class="eyebrow">Start where you are</p>
+          <h2>Make the product you want to show, without pretending the workbench is already clean.</h2>
+          <p>Hatch keeps exploration private and makes every public snapshot explainable.</p>
+          <a class="button" href="README.md">Start with Hatch</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell"><span>Hatch / 해치</span><span>Build messily. Publish cleanly.</span></div>
+    </footer>
+  </body>
+</html>

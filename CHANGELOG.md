@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+Refresh the public Hatch landing page and release classification guidance.
+
 ## 0.2.0
 
 Recognize reviewed binary asset manifests during audit.
