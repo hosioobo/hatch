@@ -8,6 +8,8 @@ Hatch gives solo makers a private workbench for exploration and a clean product
 space for sharing. It makes the boundary between them explicit, so a public
 release does not depend on reconstructing the same requirements every time.
 
+[See the Hatch landing page →](https://hosioobo.github.io/hatch/)
+
 ## Quickstart
 
 After installing Hatch, start a project with `$hatch`. It creates separate
