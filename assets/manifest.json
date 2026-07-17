@@ -17,6 +17,14 @@
       "source": "Original Hatch image generated from approved visual references.",
       "purpose": "Hero mascot for the public Hatch landing page.",
       "reviewed": true
+    },
+    {
+      "path": "assets/hatch-og-v1.png",
+      "sha256": "df96055ded0c61a988f731f056b12ef55818db1b1ab419a69f18cba069afa3fe",
+      "bytes": 568040,
+      "source": "Original Hatch image generated from the approved mascot design.",
+      "purpose": "Open Graph and large social-card preview for the public Hatch landing page.",
+      "reviewed": true
     }
   ]
 }
