@@ -3,6 +3,14 @@
   "kind": "hatch.binary-manifest",
   "assets": [
     {
+      "path": "assets/hatch-favicon-v1.png",
+      "sha256": "90032cfc18abfcd41965df00bb81461b5b77a66f5b766fc2a6221faa01297020",
+      "bytes": 5489,
+      "source": "Derived from the reviewed Hatch navigation icon.",
+      "purpose": "Browser favicon for the public Hatch landing page.",
+      "reviewed": true
+    },
+    {
       "path": "assets/hatch-icon-v1.png",
       "sha256": "3977b1c57eff19c1645b3c8f6eb7003a165e484254837955a884d0ed0af67263",
       "bytes": 223510,
